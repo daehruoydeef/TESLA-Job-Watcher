@@ -17,8 +17,9 @@ const bot = new TeleBot({
 bot.on(["/watch"], (msg) => init(msg));
 
 const init = (msg) => {
-  addToUserQueue(msg.from.id);
-  poll();
+  let id = msg.from.id;
+  bot.sendMessage(id, "Your Chat ID has been added to the notifier list");
+  addToUserQueue(id);
 };
 
 const sendMessage = (job) => {
@@ -36,6 +37,7 @@ const addToUserQueue = (id) => {
   updatedUsers = [];
   if (users) {
     if (!users.users.includes(id)) {
+      updatedUsers = users.users;
       updatedUsers.push(id);
     } else {
       updatedUsers = users.users;
@@ -43,6 +45,7 @@ const addToUserQueue = (id) => {
   } else {
     updatedUsers = [];
   }
+  console.log(updatedUsers);
   let userObj = {
     id: 1,
     users: updatedUsers,
@@ -72,7 +75,7 @@ async function autoScroll(page) {
 const scrapSteam = async () => {
   const url =
     "https://www.tesla.com/de_DE/careers/search/?country=DE&location=Gr%C3%BCnheide%20(Gigafactory%20Berlin)&region=3";
-  const browser = await puppeteer.launch({ headless: false });
+  const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
   await page.goto(url);
   let localJobs = storage.get("1");
