@@ -2,59 +2,147 @@ require("dotenv").config();
 const puppeteer = require("puppeteer");
 const TeleBot = require("telebot");
 const JSONFileStorage = require("node-json-file-storage");
-const { save } = require("node-json-file-storage/JSONFileManager");
 
 const file_uri = __dirname + "/jobs.json";
 const storage = new JSONFileStorage(file_uri);
 
-//instantiate Telebot with our token got in the BtFather
+const user_uri = __dirname + "/chats.json";
+const user = new JSONFileStorage(user_uri);
+
 const bot = new TeleBot({
   token: process.env.ACCESS_TOKEN,
 });
 
 //our command
-bot.on(["/watch"], (msg) => {
-  // start the polling on the /watch
-  poll(msg);
-});
+bot.on(["/watch"], (msg) => init(msg));
+
+const init = (msg) => {
+  addToUserQueue(msg.from.id);
+  poll();
+};
+
+const sendMessage = (job) => {
+  let message = job.title + "\n" + job.date + "\n" + job.link;
+  let users = user.get("1");
+  if (users) {
+    users.users.forEach((user) => {
+      bot.sendMessage(user, message);
+    });
+  }
+};
+
+const addToUserQueue = (id) => {
+  let users = user.get("1");
+  updatedUsers = [];
+  if (users) {
+    if (!users.users.includes(id)) {
+      updatedUsers.push(id);
+    } else {
+      updatedUsers = users.users;
+    }
+  } else {
+    updatedUsers = [];
+  }
+  let userObj = {
+    id: 1,
+    users: updatedUsers,
+  };
+  user.put(userObj);
+};
+
+async function autoScroll(page) {
+  await page.evaluate(async () => {
+    await new Promise((resolve, reject) => {
+      var totalHeight = 0;
+      var distance = 100;
+      var timer = setInterval(() => {
+        var scrollHeight = document.body.scrollHeight;
+        window.scrollBy(0, distance);
+        totalHeight += distance;
+
+        if (totalHeight >= scrollHeight) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 100);
+    });
+  });
+}
 
 const scrapSteam = async () => {
   const url =
-    "https://www.tesla.com/de_DE/careers/search#/?region=3&country=3&city=7";
-  const browser = await puppeteer.launch();
+    "https://www.tesla.com/de_DE/careers/search/?country=DE&location=Gr%C3%BCnheide%20(Gigafactory%20Berlin)&region=3";
+  const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
   await page.goto(url);
-  let jobs = await page.evaluate(() => {
-    let results = [];
-    let tRows = document.querySelectorAll("tr");
-    let items = [].slice.call(tRows, 1);
-    items.forEach((item) => {
-      results.push({
-        title: item
-          .querySelector("a")
-          .getAttribute("title")
-          .replace("View details on", ""),
-        text: item.querySelector(".listing-department").innerText,
-      });
+  let localJobs = storage.get("1");
+  if (localJobs) {
+    localJobs = localJobs.jobs;
+  } else {
+    localJobs = [];
+  }
+  await autoScroll(page);
+  let jobs = await page.evaluate((localJobs) => {
+    var promise = new Promise((resolve, reject) => {
+      setTimeout(() => {
+        let results = [];
+        let newJob = [];
+        let tRows = document.querySelectorAll("tr");
+        let items = [].slice.call(tRows, 1);
+        var today = new Date();
+
+        items.forEach(
+          (item) => {
+            console.log(item);
+            let title = item
+              .querySelector("a")
+              .innerText.replace("View details on ", "")
+              .replace(" (m/w/d) - Gigafactory Berlin", "")
+              .replace("Brandenburg", "");
+            let date = item.querySelector("td:last-of-type").innerText;
+            if (date.includes("2021")) {
+              results.push(title);
+            }
+            if (!localJobs.includes(title) && date.includes("2021")) {
+              newJob.push({
+                title: title,
+                // category: item.querySelector(".listing-department").innerText,
+                // place: item.querySelector(".listing-location").innerText,
+                // date: item.querySelector(".listing-dateposted").innerText,
+                link: item.querySelector("a").href,
+                date: date,
+              });
+            }
+            resolve({ results: results, newJob: newJob });
+          },
+          [localJobs]
+        );
+      }, 2000);
     });
-    return results;
-  });
+    return promise.then((data) => {
+      return { results: data.results, newJob: data.newJob };
+    });
+  }, localJobs);
   let saveObj = {
     id: 1,
-    jobs: jobs,
+    jobs: jobs.results,
   };
   storage.put(saveObj);
-  let deals = "deals";
   browser.close();
-  return deals;
+  return jobs.newJob;
 };
 
-async function poll(msg) {
+async function poll() {
   console.log("refresh");
-  await scrapSteam();
-  //     bot.sendMessage(msg.from.id, `Hello ${msg.chat.username}`);
-  setTimeout(poll.bind(null, msg), 10000);
+  let newJob = await scrapSteam();
+  if (newJob) {
+    newJob.forEach((job) => {
+      sendMessage(job);
+    });
+  }
+  setTimeout(poll.bind(null), 50000);
 }
 
 //start polling
+poll();
 bot.start();
