@@ -140,7 +140,7 @@ async function poll() {
       sendMessage(job);
     });
   }
-  setTimeout(poll.bind(null), 50000);
+  setTimeout(poll.bind(null), 500000);
 }
 
 //start polling
