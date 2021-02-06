@@ -16,6 +16,17 @@ const bot = new TeleBot({
 //our command
 bot.on(["/watch"], (msg) => init(msg));
 
+bot.on(["/ids"], (msg) => showIds(msg));
+
+const showIds = (msg) => {
+  let users = user.get("1");
+  let message = "";
+  users.users.forEach((user) => {
+    message += " " + user;
+  });
+  bot.sendMessage(msg.from.id, message);
+};
+
 const init = (msg) => {
   let id = msg.from.id;
   bot.sendMessage(id, "Your Chat ID has been added to the notifier list");
@@ -45,7 +56,6 @@ const addToUserQueue = (id) => {
   } else {
     updatedUsers = [];
   }
-  console.log(updatedUsers);
   let userObj = {
     id: 1,
     users: updatedUsers,
@@ -57,7 +67,7 @@ async function autoScroll(page) {
   await page.evaluate(async () => {
     await new Promise((resolve, reject) => {
       var totalHeight = 0;
-      var distance = 100;
+      var distance = 200;
       var timer = setInterval(() => {
         var scrollHeight = document.body.scrollHeight;
         window.scrollBy(0, distance);
@@ -92,11 +102,8 @@ const scrapSteam = async () => {
         let newJob = [];
         let tRows = document.querySelectorAll("tr");
         let items = [].slice.call(tRows, 1);
-        var today = new Date();
-
         items.forEach(
           (item) => {
-            console.log(item);
             let title = item
               .querySelector("a")
               .innerText.replace("View details on ", "")
@@ -131,12 +138,11 @@ const scrapSteam = async () => {
     jobs: jobs.results,
   };
   storage.put(saveObj);
-  browser.close();
+  // browser.close();
   return jobs.newJob;
 };
 
 async function poll() {
-  console.log("refresh");
   let newJob = await scrapSteam();
   if (newJob) {
     newJob.forEach((job) => {
